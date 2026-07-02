@@ -17,6 +17,7 @@ from src.data.clean import (
     compute_target, remove_cancelled_and_diverted, select_and_deleak,
 )
 from src.data.split import split
+from src.features.propagation import add_inbound_delay
 from src.features.build_features import build_features, Preprocessor
 from src.models.registry import build_models
 from src.models.train import train_and_evaluate
@@ -35,6 +36,12 @@ def run(config_path: str | None = None) -> dict:
     # 2. Clean + target (target is clipped to a plausible range)
     df = compute_target(df, dcfg["target_clip_min"], dcfg["target_clip_max"])
     df = remove_cancelled_and_diverted(df)
+
+    # 2b. Delay propagation — must run BEFORE deleak (needs the tail + actual
+    # arrival columns) and AFTER the target exists (it reuses ARR_DELAY_MIN).
+    pcfg = cfg.get("propagation", {})
+    df = add_inbound_delay(df, pcfg.get("tail_column", ""), pcfg.get("enabled", False))
+
     df = select_and_deleak(df, dcfg["safe_columns"], dcfg["leakage_columns"])
 
     # 3. Features (timestamps kept so we can split on them)

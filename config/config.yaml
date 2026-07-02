@@ -31,6 +31,8 @@ data:
     - SCHD_FLEET_CD
     - SCHD_SUBFLEET_CD
     - MINS_TO_SCHD_DEP_QTY   # AUDIT: confirm this is truly pre-departure
+    - inbound_delay_min      # engineered: previous leg's delay for this aircraft
+    - inbound_known          # engineered: 1 if inbound delay was knowable pre-departure
 
   # Columns recorded only AFTER the flight — dropping these prevents leakage.
   leakage_columns:
@@ -76,6 +78,11 @@ weather:
 features:
   # Numeric NaNs -> train-fold median; categorical NaNs -> this placeholder.
   categorical_fill: "Unknown"
+
+# Delay-propagation feature (inbound aircraft state).
+propagation:
+  enabled: true
+  tail_column: ACTL_AIRCFT_TAIL_CD
 
 # Model zoo. Each entry: dotted import path + kwargs.
 # Add or remove a model here — no code change needed.
