@@ -1,0 +1,26 @@
+# --- Data & artifacts (never commit large or generated files) ---
+data/raw/*
+data/interim/*
+data/processed/*
+artifacts/models/*
+artifacts/reports/*
+# keep the folders in git, ignore their contents
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+!artifacts/models/.gitkeep
+!artifacts/reports/.gitkeep
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.ipynb_checkpoints/
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/

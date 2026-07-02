@@ -1,0 +1,108 @@
+# ============================================================
+# Central configuration.
+# Every path, hyper-parameter, and modelling choice lives here
+# so the code never hardcodes anything. Change behaviour by
+# editing this file — not by editing source.
+# ============================================================
+
+project:
+  name: flight-delay-prediction
+  random_state: 42
+
+data:
+  raw_path: data/raw/flights.csv
+  processed_path: data/processed/model_data.parquet
+  target: ARR_DELAY_MIN
+
+  # Timestamp columns to parse (strings -> datetime)
+  date_columns:
+    - SCHD_LEG_DEP_LCL_TMS
+    - SCHD_LEG_ARVL_LCL_TMS
+    - ACTL_LEG_DEP_LCL_TMS
+    - ACTL_LEG_ARVL_LCL_TMS
+
+  # Columns knowable BEFORE push-back — safe to use as features.
+  safe_columns:
+    - OPERAT_FLIGHT_NBR
+    - SCHD_LEG_DEP_AIRPRT_IATA_CD
+    - SCHD_LEG_ARVL_AIRPRT_IATA_CD
+    - SCHD_LEG_DEP_LCL_TMS
+    - SCHD_LEG_ARVL_LCL_TMS
+    - SCHD_FLEET_CD
+    - SCHD_SUBFLEET_CD
+    - MINS_TO_SCHD_DEP_QTY   # AUDIT: confirm this is truly pre-departure
+
+  # Columns recorded only AFTER the flight — dropping these prevents leakage.
+  leakage_columns:
+    - TTL_POST_QTY
+    - POST_NBR
+    - POST_FINAL_IND
+    - FLIFO_DELAY_REASON_CD
+    - DEP_STATUS_DESC
+    - ARVL_STATUS_DESC
+    - ACTL_LEG_DEP_LCL_TMS
+    - ACTL_LEG_ARVL_LCL_TMS
+    - ACTL_LEG_DEP_GMT_TMS
+    - ACTL_LEG_ARVL_GMT_TMS
+
+  # Sanity guards on the computed target (catches timezone/parse artifacts).
+  target_clip_min: -180   # earlier than 3h early is almost certainly a data error
+  target_clip_max: 600    # later than 10h is almost certainly a data error
+
+split:
+  # 'temporal' = train on the past, test on the future (correct for this problem).
+  # 'random'   = legacy behaviour, kept only for comparison. Do NOT ship with this.
+  strategy: temporal
+  test_size: 0.2
+  time_column: SCHD_LEG_DEP_LCL_TMS
+
+weather:
+  enabled: true
+  provider: open-meteo
+  # Cache so re-runs don't hammer the API. Delete the file to force a refresh.
+  cache_path: data/interim/weather_cache.parquet
+  airports_reference: config/airports.csv
+  archive_url: https://archive-api.open-meteo.com/v1/archive
+  request_timeout_sec: 60
+  hourly_vars:
+    - temperature_2m
+    - relative_humidity_2m
+    - precipitation
+    - weather_code
+    - pressure_msl
+    - wind_speed_10m
+    - wind_direction_10m
+
+features:
+  # Numeric NaNs -> train-fold median; categorical NaNs -> this placeholder.
+  categorical_fill: "Unknown"
+
+# Model zoo. Each entry: dotted import path + kwargs.
+# Add or remove a model here — no code change needed.
+models:
+  LightGBM:
+    import: lightgbm.LGBMRegressor
+    params: {n_estimators: 400, learning_rate: 0.05, max_depth: 10,
+             num_leaves: 31, subsample: 0.8, colsample_bytree: 0.8, verbose: -1}
+  XGBoost:
+    import: xgboost.XGBRegressor
+    params: {n_estimators: 400, learning_rate: 0.05, max_depth: 10,
+             subsample: 0.8, colsample_bytree: 0.8, verbosity: 0, tree_method: hist}
+  CatBoost:
+    import: catboost.CatBoostRegressor
+    params: {iterations: 400, learning_rate: 0.05, depth: 10, verbose: 0}
+    native_categoricals: true   # CatBoost gets raw strings, not encoded ints
+  RandomForest:
+    import: sklearn.ensemble.RandomForestRegressor
+    params: {n_estimators: 300, max_depth: 15, min_samples_leaf: 5, n_jobs: -1}
+  Ridge:
+    import: sklearn.linear_model.Ridge
+    params: {alpha: 1.0}
+
+evaluation:
+  cv_folds: 5          # time-series CV folds for the champion model
+  primary_metric: RMSE  # RMSE | MAE | R2
+
+output:
+  models_dir: artifacts/models
+  reports_dir: artifacts/reports
